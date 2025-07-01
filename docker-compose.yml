@@ -1,9 +1,0 @@
-version: '3.8'
-services:
-  exam-scheduler:
-    build: .
-    ports:
-      - "8080:80"
-    volumes:
-      - ./index.html:/usr/share/nginx/html/index.html
-      - ./exams.json:/usr/share/nginx/html/exams.json
