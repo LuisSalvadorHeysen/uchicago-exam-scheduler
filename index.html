@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>UChicago Final Exam Lookup</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; }
+    .container { max-width: 500px; margin: 3em auto; background: #fff; border-radius: 8px; padding: 2em; box-shadow: 0 2px 8px #0001; }
+    input[type="text"] { width: 100%; padding: 8px; margin: 10px 0; }
+    button { background: #800000; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #600000; }
+    #result { margin-top: 20px; padding: 10px; border-radius: 4px; background: #eee; }
+    h1 { color: #800000; }
+    ul { list-style: none; padding: 0; }
+    li { margin-bottom: 10px; background: #f5f5f5; padding: 8px; border-radius: 5px; }
+    .label { font-weight: bold; }
+    .remove-btn { background: #aaa; color: #fff; border: none; border-radius: 3px; margin-left: 1em; cursor: pointer; padding: 0.2em 0.7em; }
+    .remove-btn:hover { background: #800000; }
+    .exam-time { color: #444; }
+    #exportBtn { margin-top: 20px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>UChicago Final Exam Lookup</h1>
+    <p>Enter your class time (for lookup) and a label (for your cart):</p>
+    <input type="text" id="classTime" placeholder="e.g. 8:30 MWF or CMSC 23200">
+    <input type="text" id="classLabel" placeholder="e.g. My Cool Class">
+    <button onclick="addClass()">Add to Cart</button>
+    <div id="result"></div>
+    <h3>Your Classes Cart</h3>
+    <ul id="cart"></ul>
+    <button id="exportBtn" onclick="exportCalendar()">Export to Calendar (.ics)</button>
+  </div>
+  <script>
+    const examTimes = {
+      "8:30 mwf": "WED 10:00 AM–12:00 PM",
+      "9:30 mwf": "TU 10:00 AM–12:00 PM",
+      "10:30 mwf": "TU 5:30 PM–7:30 PM",
+      "11:30 mwf": "TH 3:00 PM–5:00 PM",
+      "12:30 mwf": "FRI 12:30 PM–2:30 PM",
+      "1:30 mw(f)": "WED 12:30 PM–2:30 PM",
+      "2:30 mwf": "WED 3:00 PM–5:00 PM",
+      "3:00 mw/wf/fm": "TU 3:00 PM–5:00 PM",
+      "3:30 mwf": "TU 3:00 PM–5:00 PM",
+      "4:30 or later mwf": "WED 7:30 AM–9:30 AM",
+      "8-9:20 tuth": "TU 7:30 AM–9:30 AM",
+      "9:30-10:50 tuth": "TH 7:30 AM–9:30 AM",
+      "11-12:20 tuth": "TH 10:00 AM–12:00 PM",
+      "12:30-1:50 tuth": "TU 12:30 PM–2:30 PM",
+      "2:00-3:20 tuth": "TH 12:30 PM–2:30 PM",
+      "3:30-4:50 tuth": "FRI 10:00 AM–12:00 PM",
+      "5:00 or later tuth": "TH 5:30 PM–7:30 PM",
+      "combined language exams": "WED 5:30 PM–7:30 PM",
+      "cmsc 23500": "WED 5:30 PM–7:30 PM",
+      "cmsc 28000": "TU 8:00 PM–10:00 PM",
+      "cmsc 23200": "WED 10:00 AM–12:00 PM",
+      "gen chem": "WED 8:00 PM–10:00 PM",
+      "hons gen chem": "WED 8:00 PM–10:00 PM",
+      "math 13300": "TH 8:00 PM–10:00 PM",
+      "cmsc 25300": "TH 8:00 PM–10:00 PM",
+      "available others 1": "FRI 7:30 AM–9:30 AM",
+      "available others 2": "FRI 3:00 PM–5:00 PM"
+    };
+
+    // Map day abbreviations to dates for Spring 2025
+    const dayToDate = {
+      "TU": "2025-05-27",
+      "WED": "2025-05-28",
+      "TH": "2025-05-29",
+      "FRI": "2025-05-30"
+    };
+
+    let cart = [];
+
+    function normalize(input) {
+      return input.trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    function lookupExamTime(classTime) {
+      let input = normalize(classTime);
+
+      // Direct match
+      if (examTimes[input]) return examTimes[input];
+
+      // Try "available others"
+      if (input.startsWith("available others")) {
+        return input.endsWith("2") ? examTimes["available others 2"] : examTimes["available others 1"];
+      }
+
+      // Try match ignoring spaces/punctuation
+      let cleanedInput = input.replace(/[\s\(\)\-\/]/g, '');
+      for (const key in examTimes) {
+        if (key.replace(/[\s\(\)\-\/]/g, '') === cleanedInput) {
+          return examTimes[key];
+        }
+      }
+
+      return null;
+    }
+
+    function addClass() {
+      const classTime = document.getElementById('classTime').value;
+      const classLabel = document.getElementById('classLabel').value;
+      const resultDiv = document.getElementById('result');
+
+      if (!classTime || !classLabel) {
+        resultDiv.textContent = "Please enter both class time and a label.";
+        resultDiv.style.color = "red";
+        return;
+      }
+
+      const examTime = lookupExamTime(classTime);
+
+      if (!examTime) {
+        resultDiv.textContent = "Exam time not found. Please check your class time or code.";
+        resultDiv.style.color = "red";
+        return;
+      }
+
+      cart.push({ label: classLabel, time: classTime, exam: examTime });
+      updateCart();
+      resultDiv.textContent = `Added "${classLabel}" (${classTime}) to cart.`;
+      resultDiv.style.color = "green";
+      document.getElementById('classTime').value = "";
+      document.getElementById('classLabel').value = "";
+    }
+
+    function updateCart() {
+      const ul = document.getElementById('cart');
+      ul.innerHTML = "";
+      cart.forEach((item, idx) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span class="label">${item.label}</span> 
+          <span class="exam-time">(${item.time} → ${item.exam})</span>
+          <button class="remove-btn" onclick="removeClass(${idx})">Remove</button>`;
+        ul.appendChild(li);
+      });
+      document.getElementById('exportBtn').style.display = cart.length ? "inline-block" : "none";
+    }
+
+    function removeClass(idx) {
+      cart.splice(idx, 1);
+      updateCart();
+    }
+
+    // Robust parser: extracts both AM/PM times
+    function parseExamTime(examStr) {
+      // Accept both en dash and hyphen
+      // Example: "WED 10:00 AM–12:00 PM" or "WED 10:00 AM-12:00 PM"
+      let dashMatch = examStr.match(/–|-/);
+      if (!dashMatch) return null;
+      let dash = dashMatch[0];
+      let [dayAndStart, endRaw] = examStr.split(dash);
+      if (!endRaw) return null;
+      let [day, ...startParts] = dayAndStart.trim().split(' ');
+      let start = startParts.join(' ').trim();
+      let end = endRaw.trim();
+
+      // If end is missing AM/PM, inherit from start
+      if (!/AM|PM/i.test(end) && /AM|PM/i.test(start)) {
+        end += start.match(/AM|PM/i)[0].toUpperCase();
+      }
+
+      let date = dayToDate[day];
+      if (!date) return null;
+      return { date, start, end };
+    }
+
+    // Helper to convert date and time to ICS format (local time, no Z)
+    function toICSDate(date, time) {
+      // date: "2025-05-28", time: "10:00 AM"
+      let [year, month, day] = date.split('-').map(Number);
+      let [hm, ampm] = time.trim().split(' ');
+      let [hour, min] = hm.split(':').map(Number);
+      if (ampm && ampm.toUpperCase() === "PM" && hour < 12) hour += 12;
+      if (ampm && ampm.toUpperCase() === "AM" && hour === 12) hour = 0;
+      return (
+        year.toString().padStart(4, '0') +
+        month.toString().padStart(2, '0') +
+        day.toString().padStart(2, '0') +
+        "T" +
+        hour.toString().padStart(2, '0') +
+        min.toString().padStart(2, '0') +
+        "00"
+      );
+    }
+
+    function exportCalendar() {
+      if (!cart.length) return;
+      let ics = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "CALSCALE:GREGORIAN"
+      ];
+      cart.forEach(item => {
+        let exam = parseExamTime(item.exam);
+        if (!exam || !exam.date) return; // skip if mapping not found
+        let dtstart = toICSDate(exam.date, exam.start);
+        let dtend = toICSDate(exam.date, exam.end);
+        ics.push("BEGIN:VEVENT");
+        ics.push(`SUMMARY:${item.label} Final Exam`);
+        ics.push(`DESCRIPTION:Class Time: ${item.time}`);
+        ics.push(`DTSTART;TZID=America/Chicago:${dtstart}`);
+        ics.push(`DTEND;TZID=America/Chicago:${dtend}`);
+        ics.push("END:VEVENT");
+      });
+      ics.push("END:VCALENDAR");
+      let blob = new Blob([ics.join('\r\n')], {type: "text/calendar"});
+      let link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = "UChicagoFinalExams.ics";
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => { document.body.removeChild(link); }, 100);
+    }
+  </script>
+</body>
+</html>

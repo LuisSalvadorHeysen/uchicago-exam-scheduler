@@ -1,0 +1,107 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy-gcp:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+    
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker
+    
+    - name: Build and push Docker images
+      run: |
+        docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/exam-scheduler-backend:${{ github.sha }} ./backend
+        docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/exam-scheduler-frontend:${{ github.sha }} ./frontend
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/exam-scheduler-backend:${{ github.sha }}
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/exam-scheduler-frontend:${{ github.sha }}
+    
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy exam-scheduler-backend \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/exam-scheduler-backend:${{ github.sha }} \
+          --platform managed \
+          --region us-central1 \
+          --allow-unauthenticated
+        
+        gcloud run deploy exam-scheduler-frontend \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/exam-scheduler-frontend:${{ github.sha }} \
+          --platform managed \
+          --region us-central1 \
+          --allow-unauthenticated
+
+  deploy-aws:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+    
+    - name: Build and push Docker images
+      run: |
+        docker build -t ${{ steps.login-ecr.outputs.registry }}/exam-scheduler-backend:${{ github.sha }} ./backend
+        docker build -t ${{ steps.login-ecr.outputs.registry }}/exam-scheduler-frontend:${{ github.sha }} ./frontend
+        docker push ${{ steps.login-ecr.outputs.registry }}/exam-scheduler-backend:${{ github.sha }}
+        docker push ${{ steps.login-ecr.outputs.registry }}/exam-scheduler-frontend:${{ github.sha }}
+    
+    - name: Deploy to ECS
+      run: |
+        aws ecs update-service --cluster exam-scheduler --service exam-scheduler-backend --force-new-deployment
+        aws ecs update-service --cluster exam-scheduler --service exam-scheduler-frontend --force-new-deployment
+
+  deploy-azure:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Build and push to Azure Container Registry
+      run: |
+        az acr build --registry ${{ secrets.ACR_NAME }} --image exam-scheduler-backend:${{ github.sha }} ./backend
+        az acr build --registry ${{ secrets.ACR_NAME }} --image exam-scheduler-frontend:${{ github.sha }} ./frontend
+    
+    - name: Deploy to Azure Container Instances
+      run: |
+        az container create \
+          --resource-group exam-scheduler \
+          --name exam-scheduler-backend \
+          --image ${{ secrets.ACR_NAME }}.azurecr.io/exam-scheduler-backend:${{ github.sha }} \
+          --dns-name-label exam-scheduler-backend \
+          --ports 8080
+        
+        az container create \
+          --resource-group exam-scheduler \
+          --name exam-scheduler-frontend \
+          --image ${{ secrets.ACR_NAME }}.azurecr.io/exam-scheduler-frontend:${{ github.sha }} \
+          --dns-name-label exam-scheduler-frontend \
+          --ports 3000 
