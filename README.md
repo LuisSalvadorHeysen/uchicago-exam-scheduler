@@ -1,5 +1,12 @@
 # UChicago Exam Scheduler
 
+## 🚀 Live Demo
+
+Try the app online:  
+[https://luissalvadorheysen.github.io/portfolio/exam-scheduler/](https://luissalvadorheysen.github.io/portfolio/exam-scheduler/)
+
+---
+
 A simple web application that helps UChicago students easily lookup final exam times and save them as calendar events.
 
 ## Features
